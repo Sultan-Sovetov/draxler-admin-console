@@ -11,6 +11,11 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as AppRouteImport } from './routes/_app'
+import { Route as AppIndexRouteImport } from './routes/_app/index'
+import { Route as AppUploadRouteImport } from './routes/_app/upload'
+import { Route as AppQueueRouteImport } from './routes/_app/queue'
+import { Route as AppBatchRouteImport } from './routes/_app/batch'
+import { Route as AppArchiveRouteImport } from './routes/_app/archive'
 
 const LoginRoute = LoginRouteImport.update({
   id: '/login',
@@ -21,30 +26,76 @@ const AppRoute = AppRouteImport.update({
   id: '/_app',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AppIndexRoute = AppIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppUploadRoute = AppUploadRouteImport.update({
+  id: '/upload',
+  path: '/upload',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppQueueRoute = AppQueueRouteImport.update({
+  id: '/queue',
+  path: '/queue',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppBatchRoute = AppBatchRouteImport.update({
+  id: '/batch',
+  path: '/batch',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppArchiveRoute = AppArchiveRouteImport.update({
+  id: '/archive',
+  path: '/archive',
+  getParentRoute: () => AppRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
-  '/': typeof AppRoute
+  '/': typeof AppIndexRoute
   '/login': typeof LoginRoute
+  '/archive': typeof AppArchiveRoute
+  '/batch': typeof AppBatchRoute
+  '/queue': typeof AppQueueRoute
+  '/upload': typeof AppUploadRoute
 }
 export interface FileRoutesByTo {
-  '/': typeof AppRoute
   '/login': typeof LoginRoute
+  '/archive': typeof AppArchiveRoute
+  '/batch': typeof AppBatchRoute
+  '/queue': typeof AppQueueRoute
+  '/upload': typeof AppUploadRoute
+  '/': typeof AppIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
-  '/_app': typeof AppRoute
+  '/_app': typeof AppRouteWithChildren
   '/login': typeof LoginRoute
+  '/_app/archive': typeof AppArchiveRoute
+  '/_app/batch': typeof AppBatchRoute
+  '/_app/queue': typeof AppQueueRoute
+  '/_app/upload': typeof AppUploadRoute
+  '/_app/': typeof AppIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/login'
+  fullPaths: '/' | '/login' | '/archive' | '/batch' | '/queue' | '/upload'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/login'
-  id: '__root__' | '/_app' | '/login'
+  to: '/login' | '/archive' | '/batch' | '/queue' | '/upload' | '/'
+  id:
+    | '__root__'
+    | '/_app'
+    | '/login'
+    | '/_app/archive'
+    | '/_app/batch'
+    | '/_app/queue'
+    | '/_app/upload'
+    | '/_app/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
-  AppRoute: typeof AppRoute
+  AppRoute: typeof AppRouteWithChildren
   LoginRoute: typeof LoginRoute
 }
 
@@ -64,13 +115,76 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/_app/': {
+      id: '/_app/'
+      path: '/'
+      fullPath: '/'
+      preLoaderRoute: typeof AppIndexRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/upload': {
+      id: '/_app/upload'
+      path: '/upload'
+      fullPath: '/upload'
+      preLoaderRoute: typeof AppUploadRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/queue': {
+      id: '/_app/queue'
+      path: '/queue'
+      fullPath: '/queue'
+      preLoaderRoute: typeof AppQueueRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/batch': {
+      id: '/_app/batch'
+      path: '/batch'
+      fullPath: '/batch'
+      preLoaderRoute: typeof AppBatchRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/archive': {
+      id: '/_app/archive'
+      path: '/archive'
+      fullPath: '/archive'
+      preLoaderRoute: typeof AppArchiveRouteImport
+      parentRoute: typeof AppRoute
+    }
   }
 }
 
+interface AppRouteChildren {
+  AppArchiveRoute: typeof AppArchiveRoute
+  AppBatchRoute: typeof AppBatchRoute
+  AppQueueRoute: typeof AppQueueRoute
+  AppUploadRoute: typeof AppUploadRoute
+  AppIndexRoute: typeof AppIndexRoute
+}
+
+const AppRouteChildren: AppRouteChildren = {
+  AppArchiveRoute: AppArchiveRoute,
+  AppBatchRoute: AppBatchRoute,
+  AppQueueRoute: AppQueueRoute,
+  AppUploadRoute: AppUploadRoute,
+  AppIndexRoute: AppIndexRoute,
+}
+
+const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)
+
 const rootRouteChildren: RootRouteChildren = {
-  AppRoute: AppRoute,
+  AppRoute: AppRouteWithChildren,
   LoginRoute: LoginRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
+import type { getRouter } from './router.tsx'
+import type { startInstance } from './start.ts'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
+    config: Awaited<ReturnType<typeof startInstance.getOptions>>
+  }
+}
