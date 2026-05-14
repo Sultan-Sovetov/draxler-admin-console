@@ -3,13 +3,20 @@ import { LayoutGrid, UploadCloud, Layers, ListOrdered, Archive, LogOut } from "l
 import { useAuth } from "@/store/auth.store";
 import { cn } from "@/lib/utils";
 
-export const NAV_ITEMS = [
+type NavItem = {
+  to: "/" | "/upload" | "/batch" | "/queue" | "/archive";
+  label: string;
+  icon: typeof LayoutGrid;
+  exact?: boolean;
+};
+
+export const NAV_ITEMS: NavItem[] = [
   { to: "/", label: "Главная", icon: LayoutGrid, exact: true },
   { to: "/upload", label: "Загрузка", icon: UploadCloud },
   { to: "/batch", label: "Пакет", icon: Layers },
   { to: "/queue", label: "Очередь", icon: ListOrdered },
   { to: "/archive", label: "Архив", icon: Archive },
-] as const;
+];
 
 export function Sidebar() {
   const path = useRouterState({ select: (s) => s.location.pathname });
