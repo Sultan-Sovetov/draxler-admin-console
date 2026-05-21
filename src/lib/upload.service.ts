@@ -29,26 +29,34 @@ export async function publishProduct(
     
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
-      const fileExt = file.name.split('.').pop();
-      const fileName = `${productId}-${Date.now()}-${i}.${fileExt}`;
-      const filePath = `products/${fileName}`;
+      
+      const formData = new FormData();
+      formData.append("file", file);
+      // Берём upload preset и название облака из .env, или используем те, что вы указали
+      formData.append("upload_preset", import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET || "Draxler");
+      const cloudName = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME || "dooefod1w";
 
-      const { error: uploadError } = await supabase.storage
-        .from("images")
-        .upload(filePath, file);
+      // Загрузка файла напрямую в Cloudinary (unsigned)
+      const res = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/image/upload`, {
+        method: "POST",
+        body: formData,
+      });
 
-      if (uploadError) throw new Error(`Ошибка загрузки фото: ${uploadError.message}`);
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(`Ошибка загрузки фото в Cloudinary: ${errorData.error?.message || res.statusText}`);
+      }
 
-      const { data: { publicUrl } } = supabase.storage
-        .from("images")
-        .getPublicUrl(filePath);
+      const data = await res.json();
 
+      // Сохраняем полученную ссылку secure_url в Supabase таблицу product_images
       const imageRecord: Omit<ProductImage, "id" | "created_at"> = {
         product_id: productId,
-        image_url: publicUrl,
+        image_url: data.secure_url,
       };
 
-      await supabase.from("product_images").insert(imageRecord);
+      const { error: dbError } = await supabase.from("product_images").insert(imageRecord);
+      if (dbError) throw new Error(`Ошибка сохранения ссылки изображения: ${dbError.message}`);
     }
   }
 
