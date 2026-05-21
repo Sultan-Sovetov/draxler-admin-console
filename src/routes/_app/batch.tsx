@@ -10,7 +10,8 @@ import { SectionCard } from "@/components/primitives/SectionCard";
 import { Dropzone } from "@/components/primitives/Dropzone";
 import { SegmentedControl } from "@/components/primitives/SegmentedControl";
 import { IntervalConfigurator } from "@/components/batch/IntervalConfigurator";
-import { CATEGORIES, SEO_TEMPLATE } from "@/lib/mock/seed";
+import { CATEGORIES } from "@/lib/mock/seed";
+import { DEFAULT_SIZES, DEFAULT_SECTIONS } from "@/lib/defaults";
 import type { Category } from "@/store/queue.store";
 import { useQueue } from "@/store/queue.store";
 import { useActivity } from "@/store/activity.store";
@@ -25,8 +26,10 @@ export const Route = createFileRoute("/_app/batch")({
 
 interface Draft {
   id: string;
+  title: string;
   thumb: string;
   category: Category;
+  file: File;
 }
 
 function BatchPage() {
@@ -43,8 +46,10 @@ function BatchPage() {
   const handleFiles = (files: File[]) => {
     const next: Draft[] = files.map((f) => ({
       id: `d-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      title: "",
       thumb: URL.createObjectURL(f),
       category: defaultCat,
+      file: f,
     }));
     setDrafts((prev) => [...prev, ...next]);
     toast.success(`Добавлено ${files.length} файл${files.length === 1 ? "" : files.length < 5 ? "а" : "ов"}`);
@@ -53,16 +58,30 @@ function BatchPage() {
   const removeDraft = (id: string) => setDrafts((prev) => prev.filter((d) => d.id !== id));
   const setDraftCat = (id: string, cat: Category) =>
     setDrafts((prev) => prev.map((d) => (d.id === id ? { ...d, category: cat } : d)));
+  const setDraftTitle = (id: string, title: string) =>
+    setDrafts((prev) => prev.map((d) => (d.id === id ? { ...d, title } : d)));
 
   const sendToQueue = () => {
     if (drafts.length === 0) return;
     addBatch(
       drafts.map((d) => ({
         id: d.id,
+        title: d.title,
         images: [d.thumb],
-        text: SEO_TEMPLATE,
+        sizes: [...DEFAULT_SIZES],
+        section_1_title: DEFAULT_SECTIONS[0].title,
+        section_1_text: DEFAULT_SECTIONS[0].text,
+        section_2_title: DEFAULT_SECTIONS[1].title,
+        section_2_text: DEFAULT_SECTIONS[1].text,
+        section_3_title: DEFAULT_SECTIONS[2].title,
+        section_3_text: DEFAULT_SECTIONS[2].text,
+        section_4_title: DEFAULT_SECTIONS[3].title,
+        section_4_text: DEFAULT_SECTIONS[3].text,
+        section_5_title: DEFAULT_SECTIONS[4].title,
+        section_5_text: DEFAULT_SECTIONS[4].text,
         category: d.category,
         tags: [],
+        files: [d.file],
       })),
     );
     log({ actor, action: `загрузил батч (${drafts.length} шт.)` });
@@ -157,32 +176,38 @@ function BatchPage() {
                         height: row.size,
                       }}
                     >
-                      <div className="flex items-center gap-4 h-full pr-2 border-b border-border">
-                        <div className="w-16 h-16 rounded-[2px] overflow-hidden bg-muted shrink-0">
-                          <img src={d.thumb} alt="" className="w-full h-full object-cover" />
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <div className="text-[13px] text-foreground truncate">
-                            Карточка #{row.index + 1}
+                      <div className="flex flex-col md:flex-row md:items-center gap-4 h-full pr-2 border-b border-border py-4">
+                        <div className="flex items-center gap-4 flex-1">
+                          <div className="w-16 h-16 rounded-[2px] overflow-hidden bg-muted shrink-0">
+                            <img src={d.thumb} alt="" className="w-full h-full object-cover" />
                           </div>
-                          <div className="text-[11px] text-muted-foreground truncate">id: {d.id}</div>
+                          <div className="min-w-0 flex-1">
+                            <input
+                              type="text"
+                              value={d.title}
+                              onChange={(e) => setDraftTitle(d.id, e.target.value)}
+                              placeholder={`Карточка #${row.index + 1}`}
+                              className="w-full bg-transparent text-[13px] text-foreground border-b border-transparent focus:border-border/50 outline-none pb-1 transition-colors"
+                            />
+                            <div className="text-[11px] text-muted-foreground truncate opacity-70 mt-1">{d.file.name}</div>
+                          </div>
                         </div>
-                        <div className="hidden md:block">
+                        <div className="flex items-center gap-4 pl-0 md:pl-4">
                           <SegmentedControl
                             options={CATEGORIES}
                             value={d.category}
                             onChange={(v) => setDraftCat(d.id, v)}
                             size="sm"
                           />
+                          <button
+                            type="button"
+                            onClick={() => removeDraft(d.id)}
+                            aria-label="Удалить"
+                            className="w-11 h-11 rounded-full text-muted-foreground hover:text-destructive hover:bg-muted inline-flex items-center justify-center transition-colors"
+                          >
+                            <Trash2 className="w-4 h-4" strokeWidth={1.7} />
+                          </button>
                         </div>
-                        <button
-                          type="button"
-                          onClick={() => removeDraft(d.id)}
-                          aria-label="Удалить"
-                          className="w-11 h-11 rounded-full text-muted-foreground hover:text-destructive hover:bg-muted inline-flex items-center justify-center transition-colors"
-                        >
-                          <Trash2 className="w-4 h-4" strokeWidth={1.7} />
-                        </button>
                       </div>
                     </div>
                   );

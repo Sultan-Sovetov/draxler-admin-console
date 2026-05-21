@@ -1,12 +1,13 @@
 import * as React from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { motion, AnimatePresence } from "framer-motion";
-import { Search, X } from "lucide-react";
+import { Search, X, RefreshCw } from "lucide-react";
 import { PageHeader } from "@/components/primitives/PageHeader";
 import { SectionCard } from "@/components/primitives/SectionCard";
 import { SegmentedControl } from "@/components/primitives/SegmentedControl";
 import { EmptyState } from "@/components/primitives/EmptyState";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { Skeleton } from "@/components/ui/skeleton";
 import { SingleUploadForm } from "@/components/upload/SingleUploadForm";
 import { useArchive, type ArchiveItem } from "@/store/archive.store";
 import type { Category } from "@/store/queue.store";
@@ -31,21 +32,35 @@ function ArchivePage() {
   const items = useArchive((s) => s.items);
   const filters = useArchive((s) => s.filters);
   const setFilter = useArchive((s) => s.setFilter);
+  const isLoading = useArchive((s) => s.isLoading);
+  const hasFetched = useArchive((s) => s.hasFetched);
+  const fetchFromSupabase = useArchive((s) => s.fetchFromSupabase);
   const isDesktop = useMediaQuery("(min-width: 768px)");
 
   const [editing, setEditing] = React.useState<ArchiveItem | null>(null);
+
+  // Fetch from Supabase on mount
+  React.useEffect(() => {
+    if (!hasFetched) {
+      fetchFromSupabase();
+    }
+  }, [hasFetched, fetchFromSupabase]);
 
   const filtered = React.useMemo(() => {
     return items.filter((i) => {
       if (filters.category && i.category !== filters.category) return false;
       if (filters.query) {
         const q = filters.query.toLowerCase();
-        if (
-          !i.tags.some((t) => t.includes(q)) &&
-          !i.text.toLowerCase().includes(q) &&
-          !CATEGORY_LABEL[i.category].toLowerCase().includes(q)
-        )
-          return false;
+        const searchableText = [
+          ...i.tags,
+          i.section_1_title, i.section_1_text,
+          i.section_2_title, i.section_2_text,
+          i.section_3_title, i.section_3_text,
+          i.section_4_title, i.section_4_text,
+          i.section_5_title, i.section_5_text,
+          CATEGORY_LABEL[i.category],
+        ].join(" ").toLowerCase();
+        if (!searchableText.includes(q)) return false;
       }
       return true;
     });
@@ -59,6 +74,17 @@ function ArchivePage() {
         eyebrow="Каталог"
         title="Управление контентом"
         description="Архив всех опубликованных карточек. Фильтруйте, ищите и редактируйте без перехода на отдельную страницу."
+        actions={
+          <button
+            type="button"
+            onClick={() => fetchFromSupabase()}
+            disabled={isLoading}
+            className="h-11 px-5 rounded-[2px] bg-card text-foreground text-[13px] font-medium inline-flex items-center gap-2 hover:bg-muted transition-colors disabled:opacity-60"
+          >
+            <RefreshCw className={`w-4 h-4 ${isLoading ? "animate-spin" : ""}`} strokeWidth={1.8} />
+            Обновить
+          </button>
+        }
       />
 
       <SectionCard className="mb-6">
@@ -91,11 +117,25 @@ function ArchivePage() {
         </div>
       </SectionCard>
 
-      {filtered.length === 0 ? (
+      {isLoading && !hasFetched ? (
+        /* Loading skeleton */
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 md:gap-5">
+          {Array.from({ length: 10 }).map((_, i) => (
+            <div key={i} className="bg-card rounded-[2px] overflow-hidden">
+              <Skeleton className="aspect-square w-full" />
+              <div className="p-4 space-y-2">
+                <Skeleton className="h-3 w-16" />
+                <Skeleton className="h-4 w-full" />
+                <Skeleton className="h-3 w-24" />
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : filtered.length === 0 ? (
         <SectionCard>
           <EmptyState
             title="Ничего не найдено"
-            description="Измените фильтры или поисковый запрос."
+            description={hasFetched ? "Измените фильтры или поисковый запрос." : "Загрузка данных..."}
           />
         </SectionCard>
       ) : (
@@ -115,20 +155,29 @@ function ArchivePage() {
                 className="group text-left bg-card rounded-[2px] overflow-hidden focus:outline-none focus:ring-1 focus:ring-foreground/30"
               >
                 <div className="aspect-square bg-muted overflow-hidden">
-                  <img
-                    src={it.images[0]}
-                    alt=""
-                    className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-[1.02]"
-                  />
+                  {it.images[0] ? (
+                    <img
+                      src={it.images[0]}
+                      alt=""
+                      className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-[1.02]"
+                    />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center text-muted-foreground text-[12px]">
+                      Нет фото
+                    </div>
+                  )}
                 </div>
                 <div className="p-4">
                   <div className="text-[10px] tracking-[0.18em] uppercase text-muted-foreground">
                     {CATEGORY_LABEL[it.category]}
                   </div>
-                  <div className="mt-1.5 text-[13px] text-foreground truncate">
+                  <div className="mt-1.5 text-[13px] font-medium text-foreground truncate">
+                    {it.title || "Без названия"}
+                  </div>
+                  <div className="mt-0.5 text-[12px] text-muted-foreground truncate">
                     {it.tags.length > 0 ? it.tags.slice(0, 2).join(" · ") : "Без тегов"}
                   </div>
-                  <div className="mt-1 text-[11px] text-muted-foreground tabular-nums">
+                  <div className="mt-1.5 text-[11px] text-muted-foreground tabular-nums opacity-80">
                     {formatDateTime(it.publishedAt)}
                   </div>
                 </div>
