@@ -1,9 +1,6 @@
-// Default TanStack Start server entry — delegates to the built-in Nitro handler.
-// Nitro auto-detects the deployment target (Vercel, Node, etc.) at build time.
+import { createStartHandler, defaultStreamHandler } from "@tanstack/react-start/server";
+import { createServerEntry } from "@tanstack/react-start/server-entry";
 
-import {
-  createStartHandler,
-  defaultStreamHandler,
-} from "@tanstack/react-start/server";
+const fetch = createStartHandler(defaultStreamHandler);
 
-export default createStartHandler(defaultStreamHandler);
+export default createServerEntry({ fetch });
