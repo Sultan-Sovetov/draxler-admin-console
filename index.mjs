@@ -1,0 +1,1 @@
+import handler from './dist/server/server.js'; console.log(handler.toString());

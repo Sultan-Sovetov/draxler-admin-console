@@ -1,0 +1,1 @@
+import * as conf from '@tanstack/start-config'; console.log(Object.keys(conf));
