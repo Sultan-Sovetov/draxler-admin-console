@@ -62,7 +62,9 @@ export function Sidebar() {
       <div className="p-4 border-t border-border">
         <div className="flex items-center justify-between gap-3 px-3 py-3 rounded-[2px]">
           <div className="min-w-0">
-            <div className="text-[13px] font-medium text-foreground truncate">{user?.name ?? "Гость"}</div>
+            <div className="text-[13px] font-medium text-foreground truncate">
+              {user?.name ?? "Гость"}
+            </div>
             <div className="text-[11px] text-muted-foreground">Администратор</div>
           </div>
           <button

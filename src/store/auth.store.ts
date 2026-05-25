@@ -4,6 +4,7 @@ import { persist } from "zustand/middleware";
 const CREDENTIALS: Record<string, string> = {
   Tamirlan: "admin",
   Sultan: "admin",
+  Sanzhar: "admin",
 };
 
 export type AuthUser = { name: string };

@@ -1,7 +1,7 @@
 import * as React from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { motion, AnimatePresence } from "framer-motion";
-import { Search, X, RefreshCw } from "lucide-react";
+import { Search, X, RefreshCw, Trash2 } from "lucide-react";
 import { PageHeader } from "@/components/primitives/PageHeader";
 import { SectionCard } from "@/components/primitives/SectionCard";
 import { SegmentedControl } from "@/components/primitives/SegmentedControl";
@@ -35,6 +35,7 @@ function ArchivePage() {
   const isLoading = useArchive((s) => s.isLoading);
   const hasFetched = useArchive((s) => s.hasFetched);
   const fetchFromSupabase = useArchive((s) => s.fetchFromSupabase);
+  const deleteFromSupabase = useArchive((s) => s.deleteFromSupabase);
   const isDesktop = useMediaQuery("(min-width: 768px)");
 
   const [editing, setEditing] = React.useState<ArchiveItem | null>(null);
@@ -53,13 +54,20 @@ function ArchivePage() {
         const q = filters.query.toLowerCase();
         const searchableText = [
           ...i.tags,
-          i.section_1_title, i.section_1_text,
-          i.section_2_title, i.section_2_text,
-          i.section_3_title, i.section_3_text,
-          i.section_4_title, i.section_4_text,
-          i.section_5_title, i.section_5_text,
+          i.section_1_title,
+          i.section_1_text,
+          i.section_2_title,
+          i.section_2_text,
+          i.section_3_title,
+          i.section_3_text,
+          i.section_4_title,
+          i.section_4_text,
+          i.section_5_title,
+          i.section_5_text,
           CATEGORY_LABEL[i.category],
-        ].join(" ").toLowerCase();
+        ]
+          .join(" ")
+          .toLowerCase();
         if (!searchableText.includes(q)) return false;
       }
       return true;
@@ -90,7 +98,10 @@ function ArchivePage() {
       <SectionCard className="mb-6">
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
           <div className="relative md:max-w-[320px] w-full">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" strokeWidth={1.7} />
+            <Search
+              className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground"
+              strokeWidth={1.7}
+            />
             <input
               value={filters.query}
               onChange={(e) => setFilter({ query: e.target.value })}
@@ -135,7 +146,9 @@ function ArchivePage() {
         <SectionCard>
           <EmptyState
             title="Ничего не найдено"
-            description={hasFetched ? "Измените фильтры или поисковый запрос." : "Загрузка данных..."}
+            description={
+              hasFetched ? "Измените фильтры или поисковый запрос." : "Загрузка данных..."
+            }
           />
         </SectionCard>
       ) : (
@@ -197,8 +210,25 @@ function ArchivePage() {
           }
         >
           <SheetHeader className="text-left">
-            <div className="text-[11px] tracking-[0.18em] uppercase text-muted-foreground">
-              Редактирование
+            <div className="flex items-center justify-between">
+              <div className="text-[11px] tracking-[0.18em] uppercase text-muted-foreground">
+                Редактирование
+              </div>
+              <button
+                type="button"
+                className="text-destructive/80 hover:text-destructive transition-colors h-8 w-8 inline-flex items-center justify-center rounded-full hover:bg-destructive/10"
+                title="Удалить карточку"
+                onClick={async () => {
+                  if (editing?.id) {
+                    if (confirm("Вы уверены, что хотите удалить эту карточку из базы?")) {
+                      await deleteFromSupabase(editing.id);
+                      setEditing(null);
+                    }
+                  }
+                }}
+              >
+                <Trash2 className="w-4 h-4" />
+              </button>
             </div>
             <SheetTitle className="text-foreground text-[20px] font-semibold tracking-tight">
               Карточка диска

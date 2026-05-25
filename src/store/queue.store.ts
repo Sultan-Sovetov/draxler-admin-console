@@ -1,15 +1,15 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
+import { supabase } from "@/lib/supabase";
 import { recalcSchedule } from "@/lib/schedule";
-import { makeSeedQueueItems } from "@/lib/mock/seed";
-import { useArchive } from "./archive.store";
-import { useActivity } from "./activity.store";
-import { publishProduct, toProductInsert } from "@/lib/upload.service";
-import { generateNextTitle } from "@/lib/title-generator";
+import type { RealtimeChannel } from "@supabase/supabase-js";
+
+// Module-level channel reference to prevent duplicate subscriptions across
+// React Strict Mode double-invocations and hot reloads.
+let _queueChannel: RealtimeChannel | null = null;
 
 export type Category = "off-road" | "luxury" | "sport";
-
-export type PublishStatus = "idle" | "uploading" | "error" | "success";
+export type PublishStatus = "pending" | "processing" | "success" | "error";
 
 export interface QueueItem {
   id: string;
@@ -30,141 +30,195 @@ export interface QueueItem {
   tags: string[];
   paused: boolean;
   scheduledAt: number;
-  files?: File[];
-  status?: PublishStatus;
+  status: PublishStatus;
   progress?: string;
   error?: string;
+  error_msg?: string;
 }
 
-export type QueueDraft = Omit<QueueItem, "scheduledAt" | "paused"> & { paused?: boolean };
+export type QueueDraft = Omit<QueueItem, "id" | "scheduledAt" | "paused" | "status"> & { paused?: boolean };
 
 interface QueueState {
   items: QueueItem[];
   intervalMin: number;
   startAt: number;
   isProcessing: boolean;
-  addBatch: (drafts: QueueDraft[]) => void;
-  reorder: (fromIndex: number, toIndex: number) => void;
-  togglePause: (id: string) => void;
-  publishNow: (id: string, actor?: string) => Promise<void>;
+  fetchQueue: () => Promise<void>;
+  addBatch: (drafts: QueueDraft[]) => Promise<void>;
+  reorder: (fromIndex: number, toIndex: number) => Promise<void>;
+  togglePause: (id: string) => Promise<void>;
+  setInterval: (m: number) => Promise<void>;
+  remove: (id: string) => Promise<void>;
+  subscribeToChanges: () => void;
   processQueue: (actor?: string) => Promise<void>;
-  setInterval: (m: number) => void;
-  remove: (id: string) => void;
-  update: (id: string, patch: Partial<QueueItem>) => void;
-}
-
-function reseed(items: QueueItem[], startAt: number, intervalMin: number): QueueItem[] {
-  return recalcSchedule(items, startAt, intervalMin);
+  publishNow: (id: string, actor?: string) => Promise<void>;
+  update: (id: string, patch: Partial<QueueItem>) => Promise<void>;
 }
 
 export const useQueue = create<QueueState>()(
   persist(
     (set, get) => ({
-      items: makeSeedQueueItems(),
+      items: [],
       intervalMin: 25,
       startAt: Date.now() + 12 * 60_000,
       isProcessing: false,
-      addBatch: (drafts) => {
-        const { items, startAt, intervalMin } = get();
-        const nextItems = [
-          ...items,
-          ...drafts.map((d) => ({ ...d, paused: d.paused ?? false, scheduledAt: 0 })),
-        ];
-        set({ items: reseed(nextItems, startAt, intervalMin) });
+      
+      fetchQueue: async () => {
+        const { data, error } = await supabase
+          .from("publication_queue")
+          .select("*")
+          .neq("status", "success")
+          .order("scheduled_at", { ascending: true });
+          
+        if (error) {
+          console.error("Queue fetch error:", error);
+          return;
+        }
+
+        const items: QueueItem[] = data.map((d: any) => ({
+          ...d,
+          scheduledAt: new Date(d.scheduled_at).getTime(),
+          paused: d.status === "paused"
+        }));
+
+        set({ items });
       },
-      reorder: (fromIndex, toIndex) => {
+
+      addBatch: async (drafts) => {
+        const { items, startAt, intervalMin } = get();
+        const upcomingStarts = recalcSchedule(
+          [...items, ...drafts.map(d => ({ ...d, id: "temp", scheduledAt: 0, status: "pending" as PublishStatus, paused: false }))],
+          startAt,
+          intervalMin
+        );
+
+        const newItemsToInsert = upcomingStarts.slice(items.length).map(item => ({
+          title: item.title,
+          images: item.images,
+          sizes: item.sizes,
+          section_1_title: item.section_1_title,
+          section_1_text: item.section_1_text,
+          section_2_title: item.section_2_title,
+          section_2_text: item.section_2_text,
+          section_3_title: item.section_3_title,
+          section_3_text: item.section_3_text,
+          section_4_title: item.section_4_title,
+          section_4_text: item.section_4_text,
+          section_5_title: item.section_5_title,
+          section_5_text: item.section_5_text,
+          category: item.category,
+          tags: item.tags,
+          status: "pending",
+          scheduled_at: new Date(item.scheduledAt).toISOString()
+        }));
+
+        const { error } = await supabase.from("publication_queue").insert(newItemsToInsert);
+        if (error) throw error;
+        
+        await get().fetchQueue();
+      },
+
+      reorder: async (fromIndex, toIndex) => {
         const { items, startAt, intervalMin } = get();
         const next = items.slice();
         const [moved] = next.splice(fromIndex, 1);
         next.splice(toIndex, 0, moved);
-        set({ items: reseed(next, startAt, intervalMin) });
-      },
-      togglePause: (id) => {
-        const { items, startAt, intervalMin } = get();
-        const next = items.map((i) => (i.id === id ? { ...i, paused: !i.paused } : i));
-        set({ items: reseed(next, startAt, intervalMin) });
-      },
-      publishNow: async (id, actor = "Система") => {
-        const { items, startAt, intervalMin, update, remove } = get();
-        const target = items.find((i) => i.id === id);
-        if (!target || target.status === "uploading") return;
+        
+        const rescheduled = recalcSchedule(next, startAt, intervalMin);
+        set({ items: rescheduled });
 
-        update(id, { status: "uploading", error: undefined, progress: "Генерация названия..." });
-
-        try {
-          let finalTitle = target.title;
-          if (!finalTitle) {
-            try {
-              finalTitle = await generateNextTitle(target.category);
-            } catch {
-              finalTitle = `DRX-${Date.now().toString().slice(-4)}`;
-            }
-          }
-
-          const productData = { ...target, title: finalTitle };
-          const payload = toProductInsert(productData);
-          const files = target.files || [];
-
-          const product = await publishProduct(payload, files, (msg) => {
-            update(id, { progress: msg });
-          });
-
-          useArchive.getState().add({
-            ...productData,
-            productId: product.id,
-            publishedAt: Date.now(),
-            status: "success",
-            progress: "Опубликовано",
-            files: undefined,
-          });
-
-          remove(id);
-          useActivity.getState().log({ actor, action: `опубликовал карточку ${finalTitle} (${target.category})` });
-        } catch (error) {
-          const msg = error instanceof Error ? error.message : "Неизвестная ошибка";
-          update(id, { status: "error", error: msg, progress: undefined });
-          throw error;
+        for (const item of rescheduled) {
+          await supabase.from("publication_queue")
+            .update({ scheduled_at: new Date(item.scheduledAt).toISOString() })
+            .eq("id", item.id);
         }
       },
-      processQueue: async (actor = "Система") => {
-        if (get().isProcessing) return;
-        set({ isProcessing: true });
+      
+      update: async (id, patch) => {
+        const dbPatch: any = { ...patch };
+        // handle mappings for db
+        if (dbPatch.images) {
+          // If we want to replace images in the queue, we can just update the array in JSON
+          // But wait, the JSON has `images` mapped to `images` since Supabase supports arrays?
+        }
         
-        try {
-          const now = Date.now();
-          const items = get().items;
-          const dueItems = items.filter(
-            (i) => !i.paused && i.scheduledAt <= now && i.status !== "uploading" && i.status !== "error"
-          );
+        await supabase.from("publication_queue").update(dbPatch).eq("id", id);
+        
+        // update local state optimistic
+        set(s => ({ items: s.items.map(i => i.id === id ? { ...i, ...patch } : i) }));
+      },
 
-          for (const item of dueItems) {
-            await get().publishNow(item.id, actor);
-          }
+      togglePause: async (id) => {
+        try {
+          const item = get().items.find(i => i.id === id);
+          if (!item) return;
+          const newStatus = item.paused ? "pending" : "paused";
+          await supabase.from("publication_queue")
+            .update({ status: newStatus })
+            .eq("id", id);
+          const next = get().items.map((i) => (i.id === id ? { ...i, paused: !i.paused, status: newStatus as PublishStatus } : i));
+          set({ items: next });
+        } catch (e) {
+          console.error("togglePause error", e);
+        }
+      },
+
+      setInterval: async (m) => {
+        const intervalMin = Math.max(1, Math.min(720, m));
+        const rescheduled = recalcSchedule(get().items, get().startAt, intervalMin);
+        set({ intervalMin, items: rescheduled });
+
+        for (const item of rescheduled) {
+          await supabase.from("publication_queue")
+            .update({ scheduled_at: new Date(item.scheduledAt).toISOString() })
+            .eq("id", item.id);
+        }
+      },
+
+      remove: async (id) => {
+        await supabase.from("publication_queue").delete().eq("id", id);
+        await get().fetchQueue();
+      },
+      
+      processQueue: async () => {
+        set({ isProcessing: true });
+        try {
+          // manually wake up the edge function to process everything immediately
+          await supabase.functions.invoke("process-queue");
+          await get().fetchQueue();
         } finally {
           set({ isProcessing: false });
         }
       },
-      setInterval: (m) => {
-        const { items, startAt } = get();
-        const intervalMin = Math.max(1, Math.min(720, m));
-        set({ intervalMin, items: reseed(items, startAt, intervalMin) });
+      
+      publishNow: async (id) => {
+        // Change scheduled_at to now, then invoke process-queue
+        await supabase.from("publication_queue").update({ scheduled_at: new Date().toISOString() }).eq("id", id);
+        await get().processQueue();
       },
-      remove: (id) => {
-        const { items, startAt, intervalMin } = get();
-        set({ items: reseed(items.filter((i) => i.id !== id), startAt, intervalMin) });
-      },
-      update: (id, patch) => {
-        const { items, startAt, intervalMin } = get();
-        const next = items.map((i) => (i.id === id ? { ...i, ...patch } : i));
-        set({ items: reseed(next, startAt, intervalMin) });
-      },
+
+      subscribeToChanges: () => {
+        // Only create one channel – avoids "cannot add callbacks after subscribe()" error.
+        if (_queueChannel) return;
+
+        _queueChannel = supabase
+          .channel("public:publication_queue")
+          .on(
+            "postgres_changes",
+            { event: "*", schema: "public", table: "publication_queue" },
+            (_payload) => {
+              get().fetchQueue();
+            }
+          )
+          .subscribe();
+      }
     }),
     {
       name: "draxler-queue",
       partialize: (state) => ({
-        ...state,
-        items: state.items.map((i) => ({ ...i, files: undefined, status: undefined, progress: undefined, error: undefined })),
+        intervalMin: state.intervalMin,
+        startAt: state.startAt,
       }),
-    },
-  ),
+    }
+  )
 );

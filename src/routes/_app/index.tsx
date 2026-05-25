@@ -63,7 +63,9 @@ function Dashboard() {
       <SectionCard className="mb-6">
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-5">
           <div>
-            <div className="text-[11px] tracking-[0.18em] uppercase text-muted-foreground">Активный батч</div>
+            <div className="text-[11px] tracking-[0.18em] uppercase text-muted-foreground">
+              Активный батч
+            </div>
             <div className="mt-2 text-[20px] font-semibold text-foreground">
               Опубликовано {publishedToday}/{totalSlots}
             </div>
@@ -112,7 +114,9 @@ function Dashboard() {
       <SectionCard>
         <div className="flex items-center justify-between mb-6">
           <div>
-            <div className="text-[11px] tracking-[0.18em] uppercase text-muted-foreground">Активность</div>
+            <div className="text-[11px] tracking-[0.18em] uppercase text-muted-foreground">
+              Активность
+            </div>
             <div className="mt-1 text-[18px] font-semibold text-foreground">Последние события</div>
           </div>
           <Activity className="w-4 h-4 text-muted-foreground" strokeWidth={1.6} />

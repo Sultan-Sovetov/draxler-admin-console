@@ -47,11 +47,18 @@ function QueuePage() {
   const processQueue = useQueue((s) => s.processQueue);
   const isProcessing = useQueue((s) => s.isProcessing);
   const remove = useQueue((s) => s.remove);
+  const fetchQueue = useQueue((s) => s.fetchQueue);
+  const subscribeToChanges = useQueue((s) => s.subscribeToChanges);
   const actor = useAuth((s) => s.user?.name ?? "Система");
   const now = useTicker(1000);
   const isDesktop = useMediaQuery("(min-width: 768px)");
 
   const [editing, setEditing] = React.useState<QueueItem | null>(null);
+
+  React.useEffect(() => {
+    fetchQueue();
+    subscribeToChanges();
+  }, [fetchQueue, subscribeToChanges]);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
@@ -110,11 +117,11 @@ function QueuePage() {
                       now={now}
                       index={idx}
                       onPause={() => {
-                        if (item.status !== "uploading") togglePause(item.id);
+                        if (item.status !== "processing") togglePause(item.id);
                       }}
                       onPublish={() => publishNow(item.id, actor)}
                       onRemove={() => {
-                        if (item.status === "uploading") return;
+                        if (item.status === "processing") return;
                         remove(item.id);
                         toast.success("Карточка удалена из очереди");
                       }}
@@ -148,11 +155,7 @@ function QueuePage() {
           </SheetHeader>
           {editing && (
             <div className="mt-6">
-              <SingleUploadForm
-                mode="edit"
-                initial={editing}
-                onSaved={() => setEditing(null)}
-              />
+              <SingleUploadForm mode="edit" initial={editing} onSaved={() => setEditing(null)} />
             </div>
           )}
         </SheetContent>
@@ -198,9 +201,9 @@ function QueueRow({ item, now, index, onPause, onPublish, onRemove, onEdit }: Qu
     transform: CSS.Transform.toString(transform),
     transition,
   } as React.CSSProperties;
-  const isUploading = item.status === "uploading";
+  const isProcessing = item.status === "processing";
   const statusText =
-    item.status === "uploading"
+    item.status === "processing"
       ? item.progress || "Публикуется..."
       : item.status === "error"
         ? item.error || "Ошибка публикации"
@@ -235,10 +238,7 @@ function QueueRow({ item, now, index, onPause, onPublish, onRemove, onEdit }: Qu
         onTouchMove={onTouchMove}
         onTouchEnd={onTouchEnd}
         style={{ transform: `translate3d(${swipeX}px, 0, 0)` }}
-        className={cn(
-          "relative bg-card transition-transform",
-          item.paused && "opacity-60",
-        )}
+        className={cn("relative bg-card transition-transform", item.paused && "opacity-60")}
       >
         <div className="flex items-center gap-3 md:gap-4 px-3 md:px-5 py-3">
           <button
@@ -262,10 +262,14 @@ function QueueRow({ item, now, index, onPause, onPublish, onRemove, onEdit }: Qu
               <span className="text-[11px] tracking-[0.16em] uppercase text-muted-foreground">
                 #{(index + 1).toString().padStart(2, "0")}
               </span>
-              <span className="text-[11px] tracking-[0.12em] uppercase text-muted-foreground">·</span>
+              <span className="text-[11px] tracking-[0.12em] uppercase text-muted-foreground">
+                ·
+              </span>
               <span className="text-[12px] text-foreground">{CATEGORY_LABEL[item.category]}</span>
             </div>
-            <div className="mt-1 text-[13px] font-medium text-foreground truncate">{item.title || "Авто (DRX-XXX)"}</div>
+            <div className="mt-1 text-[13px] font-medium text-foreground truncate">
+              {item.title || "Авто (DRX-XXX)"}
+            </div>
             <div className="mt-0.5 text-[12px] text-muted-foreground truncate">
               {item.tags.length > 0 ? item.tags.join(" · ") : "Без тегов"}
             </div>
@@ -282,7 +286,9 @@ function QueueRow({ item, now, index, onPause, onPublish, onRemove, onEdit }: Qu
           </div>
 
           <div className="hidden md:flex flex-col items-end shrink-0 mr-2">
-            <div className="text-[11px] tracking-wider uppercase text-muted-foreground">Публикация</div>
+            <div className="text-[11px] tracking-wider uppercase text-muted-foreground">
+              Публикация
+            </div>
             <div
               className={cn(
                 "mt-1 text-[14px] font-medium tabular-nums",
@@ -299,27 +305,34 @@ function QueueRow({ item, now, index, onPause, onPublish, onRemove, onEdit }: Qu
           </div>
 
           <div className="flex items-center gap-1 shrink-0">
-            <IconBtn label="Редактировать" onClick={onEdit} disabled={isUploading}>
+            <IconBtn label="Редактировать" onClick={onEdit} disabled={isProcessing}>
               <Pencil className="w-4 h-4" strokeWidth={1.7} />
             </IconBtn>
-            <IconBtn label={item.paused ? "Возобновить" : "Пауза"} onClick={onPause} disabled={isUploading}>
+            <IconBtn
+              label={item.paused ? "Возобновить" : "Пауза"}
+              onClick={onPause}
+              disabled={isProcessing}
+            >
               {item.paused ? (
                 <PlayCircle className="w-4 h-4" strokeWidth={1.7} />
               ) : (
                 <Pause className="w-4 h-4" strokeWidth={1.7} />
               )}
             </IconBtn>
-            <IconBtn label="Вне очереди" onClick={onPublish} disabled={isUploading}>
+            <IconBtn label="Вне очереди" onClick={onPublish} disabled={isProcessing}>
               <Zap className="w-4 h-4" strokeWidth={1.7} />
             </IconBtn>
-            <IconBtn label="Удалить" onClick={onRemove} disabled={isUploading} danger>
+            <IconBtn label="Удалить" onClick={onRemove} disabled={isProcessing} danger>
               <Trash2 className="w-4 h-4" strokeWidth={1.7} />
             </IconBtn>
           </div>
         </div>
 
         <div className="md:hidden px-3 pb-3 -mt-1 text-[12px] text-muted-foreground tabular-nums">
-          {statusText || (item.paused ? "На паузе" : `${formatTime(item.scheduledAt)} · ${formatCountdown(item.scheduledAt, now)}`)}
+          {statusText ||
+            (item.paused
+              ? "На паузе"
+              : `${formatTime(item.scheduledAt)} · ${formatCountdown(item.scheduledAt, now)}`)}
         </div>
       </div>
     </motion.li>
@@ -351,8 +364,8 @@ function IconBtn({
         disabled
           ? "text-muted-foreground/50 cursor-not-allowed"
           : danger
-          ? "text-muted-foreground hover:text-destructive hover:bg-muted"
-          : "text-muted-foreground hover:text-foreground hover:bg-muted",
+            ? "text-muted-foreground hover:text-destructive hover:bg-muted"
+            : "text-muted-foreground hover:text-foreground hover:bg-muted",
       )}
     >
       {children}

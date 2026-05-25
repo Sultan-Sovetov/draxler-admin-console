@@ -4,6 +4,28 @@ export interface PublishProductInput extends ProductInsert {
   files?: File[];
 }
 
+export async function uploadImageToCloudinary(file: File): Promise<string> {
+  const formData = new FormData();
+  formData.append("file", file);
+  // Берём upload preset и название облака из .env, или используем те, что вы указали
+  formData.append("upload_preset", import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET || "Draxler");
+  const cloudName = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME || "dooefod1w";
+
+  // Загрузка файла напрямую в Cloudinary (unsigned)
+  const res = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/image/upload`, {
+    method: "POST",
+    body: formData,
+  });
+
+  if (!res.ok) {
+    const errorData = await res.json();
+    throw new Error(`Ошибка загрузки фото в Cloudinary: ${errorData.error?.message || res.statusText}`);
+  }
+
+  const data = await res.json();
+  return data.secure_url;
+}
+
 export async function publishProduct(
   input: PublishProductInput,
   files: File[],
@@ -28,31 +50,12 @@ export async function publishProduct(
     onProgress?.("Загрузка изображений...");
     
     for (let i = 0; i < files.length; i++) {
-      const file = files[i];
-      
-      const formData = new FormData();
-      formData.append("file", file);
-      // Берём upload preset и название облака из .env, или используем те, что вы указали
-      formData.append("upload_preset", import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET || "Draxler");
-      const cloudName = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME || "dooefod1w";
-
-      // Загрузка файла напрямую в Cloudinary (unsigned)
-      const res = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/image/upload`, {
-        method: "POST",
-        body: formData,
-      });
-
-      if (!res.ok) {
-        const errorData = await res.json();
-        throw new Error(`Ошибка загрузки фото в Cloudinary: ${errorData.error?.message || res.statusText}`);
-      }
-
-      const data = await res.json();
+      const secureUrl = await uploadImageToCloudinary(files[i]);
 
       // Сохраняем полученную ссылку secure_url в Supabase таблицу product_images
       const imageRecord: Omit<ProductImage, "id" | "created_at"> = {
         product_id: productId,
-        image_url: data.secure_url,
+        image_url: secureUrl,
       };
 
       const { error: dbError } = await supabase.from("product_images").insert(imageRecord);

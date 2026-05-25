@@ -38,9 +38,7 @@ export const FloatingLabelInput = React.forwardRef<HTMLInputElement, FloatingLab
           className={cn(
             "peer w-full bg-transparent text-[15px] text-foreground pt-6 pb-2 px-0 outline-none",
             "border-0 border-b transition-colors",
-            error
-              ? "border-destructive"
-              : "border-border focus:border-foreground",
+            error ? "border-destructive" : "border-border focus:border-foreground",
             className,
           )}
           {...props}

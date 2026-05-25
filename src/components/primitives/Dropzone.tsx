@@ -59,7 +59,11 @@ export function Dropzone({
       />
       <div className="flex flex-col items-center text-center gap-3">
         <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center text-muted-foreground">
-          {variant === "batch" ? <FolderOpen className="w-5 h-5" /> : <ImagePlus className="w-5 h-5" />}
+          {variant === "batch" ? (
+            <FolderOpen className="w-5 h-5" />
+          ) : (
+            <ImagePlus className="w-5 h-5" />
+          )}
         </div>
         <div>
           <div className="text-[15px] font-medium text-foreground">

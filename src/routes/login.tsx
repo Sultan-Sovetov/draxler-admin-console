@@ -53,8 +53,12 @@ function LoginPage() {
         className="w-full max-w-[380px]"
       >
         <div className="mb-10 text-center">
-          <div className="text-[10px] tracking-[0.32em] uppercase text-muted-foreground">Admin Panel</div>
-          <div className="mt-3 text-[28px] font-semibold tracking-[-0.02em] text-foreground">Draxler</div>
+          <div className="text-[10px] tracking-[0.32em] uppercase text-muted-foreground">
+            Admin Panel
+          </div>
+          <div className="mt-3 text-[28px] font-semibold tracking-[-0.02em] text-foreground">
+            Draxler
+          </div>
         </div>
         <form onSubmit={onSubmit} className="space-y-7">
           <FloatingLabelInput

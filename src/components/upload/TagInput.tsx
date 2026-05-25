@@ -54,7 +54,7 @@ export function TagInput({ value, onChange, placeholder }: TagInputProps) {
               setText("");
             }
           }}
-          placeholder={placeholder ?? "например: для бмв 7, ковка"}
+          placeholder={placeholder ?? "Пример: кованый, r20, 5x112"}
           className="flex-1 min-w-[180px] bg-transparent text-[14px] outline-none py-1 placeholder:text-muted-foreground/70"
         />
       </div>

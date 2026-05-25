@@ -1,4 +1,4 @@
-import { create } from "zustand";
+﻿import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { supabase, type Product } from "@/lib/supabase";
 import type { Category, QueueItem } from "./queue.store";
@@ -27,6 +27,7 @@ interface ArchiveState {
   clearFilters: () => void;
   fetchFromSupabase: () => Promise<void>;
   updateInSupabase: (id: string, patch: Partial<ArchiveItem>) => Promise<void>;
+  deleteFromSupabase: (id: string) => Promise<void>;
 }
 
 /**
@@ -140,12 +141,10 @@ export const useArchive = create<ArchiveState>()(
       updateInSupabase: async (id, patch) => {
         const item = get().items.find((i) => i.id === id);
         if (!item?.productId) {
-          // Fallback: local-only update
           get().update(id, patch);
           return;
         }
 
-        // Build Supabase update payload (only product fields)
         const dbPatch: Record<string, unknown> = {};
         if (patch.title !== undefined) dbPatch.title = patch.title;
         if (patch.category !== undefined) dbPatch.type = patch.category;
@@ -168,14 +167,42 @@ export const useArchive = create<ArchiveState>()(
             .update(dbPatch)
             .eq("id", item.productId);
 
-          if (error) {
-            throw new Error(error.message);
+          if (error) throw new Error(error.message);
+        }
+
+        // if images are being updated, replace them entirely in product_images
+        if (patch.images !== undefined) {
+          // delete old
+          await supabase.from("product_images").delete().eq("product_id", item.productId);
+          
+          // insert new
+          if (patch.images.length > 0) {
+            const imageRecords = patch.images.map(url => ({
+              product_id: item.productId,
+              image_url: url
+            }));
+            await supabase.from("product_images").insert(imageRecords);
           }
         }
 
-        // Update local state
         get().update(id, patch);
       },
+      
+      deleteFromSupabase: async (id) => {
+        const item = get().items.find((i) => i.id === id);
+        if (!item?.productId) {
+          get().remove(id);
+          return;
+        }
+
+        // since cascade might not be configured, delete images first just in case
+        await supabase.from("product_images").delete().eq("product_id", item.productId);
+        
+        const { error } = await supabase.from("products").delete().eq("id", item.productId);
+        if (error) throw new Error(error.message);
+        
+        get().remove(id);
+      }
     }),
     { name: "draxler-archive" },
   ),
