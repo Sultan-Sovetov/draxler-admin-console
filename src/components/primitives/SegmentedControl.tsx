@@ -28,7 +28,7 @@ export function SegmentedControl<T extends string>({
     <div
       role="tablist"
       className={cn(
-        "inline-flex items-center bg-muted rounded-full p-1 relative",
+        "inline-flex items-center bg-muted rounded-full p-1 relative max-w-full overflow-x-auto no-scrollbar",
         size === "md" ? "min-h-[44px]" : "min-h-[36px]",
         className,
       )}
@@ -43,7 +43,7 @@ export function SegmentedControl<T extends string>({
             aria-selected={active}
             onClick={() => onChange(opt.value)}
             className={cn(
-              "relative z-10 px-4 md:px-5 rounded-full text-[13px] font-medium transition-colors",
+              "relative z-10 px-3 md:px-5 rounded-full text-[13px] font-medium transition-colors whitespace-nowrap shrink-0",
               size === "md" ? "h-9" : "h-7 text-[12px]",
               active ? "text-foreground" : "text-muted-foreground hover:text-foreground",
             )}

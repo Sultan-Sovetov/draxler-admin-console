@@ -32,6 +32,15 @@ interface SingleUploadFormProps {
   mode?: "create" | "edit";
   onSaved?: () => void;
   archiveId?: string;
+  /** For batch-edit: return form data without Supabase/Cloudinary ops */
+  onBatchSave?: (patch: {
+    category: Category;
+    tags: string[];
+    sizes: string[];
+    sections: { title: string; text: string }[];
+  }) => void;
+  /** Hide title input entirely (used in create/batch modes) */
+  hideTitle?: boolean;
 }
 
 export function SingleUploadForm({
@@ -39,6 +48,8 @@ export function SingleUploadForm({
   mode = "create",
   onSaved,
   archiveId,
+  onBatchSave,
+  hideTitle,
 }: SingleUploadFormProps) {
   const navigate = useNavigate();
   const updateArchive = useArchive((s) => s.update);
@@ -130,6 +141,19 @@ export function SingleUploadForm({
 
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    // Batch-edit: just return the form data, no upload/supabase
+    if (onBatchSave) {
+      onBatchSave({
+        category,
+        tags,
+        sizes,
+        sections: sections.map((s) => ({ title: s.title, text: s.text })),
+      });
+      onSaved?.();
+      return;
+    }
+
     setIsSubmitting(true);
 
     try {
@@ -263,17 +287,34 @@ export function SingleUploadForm({
             </div>
             <SegmentedControl options={CATEGORIES} value={category} onChange={setCategory} />
 
-            <div className="text-[14px] font-medium text-foreground py-4 hidden md:block border-t border-border mt-4">
-              Название
-            </div>
-            <div className="md:border-t md:border-border md:pt-4 md:mt-4">
-              <input
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                placeholder="Например: Кованый диск Sport Design R20. Оставьте пустым и заполнится автоматически."
-                className="w-full bg-transparent text-[16px] text-foreground placeholder:text-muted-foreground/60 outline-none pb-2 border-b border-border/50 focus:border-border transition-colors rounded-none"
-              />
-            </div>
+            {(hideTitle || mode === "create") ? (
+              /* Auto-title label — no editable input in create mode */
+              <>
+                <div className="text-[14px] font-medium text-foreground py-4 hidden md:block border-t border-border mt-4">
+                  Название
+                </div>
+                <div className="md:border-t md:border-border md:pt-4 md:mt-4">
+                  <div className="text-[14px] text-muted-foreground/70 italic pb-2 border-b border-border/30">
+                    Генерируется автоматически (DRX-XXXX)
+                  </div>
+                </div>
+              </>
+            ) : (
+              /* Editable title input — only in edit mode */
+              <>
+                <div className="text-[14px] font-medium text-foreground py-4 hidden md:block border-t border-border mt-4">
+                  Название
+                </div>
+                <div className="md:border-t md:border-border md:pt-4 md:mt-4">
+                  <input
+                    value={title}
+                    onChange={(e) => setTitle(e.target.value)}
+                    placeholder="Например: Кованый диск Sport Design R20"
+                    className="w-full bg-transparent text-[16px] text-foreground placeholder:text-muted-foreground/60 outline-none pb-2 border-b border-border/50 focus:border-border transition-colors rounded-none"
+                  />
+                </div>
+              </>
+            )}
           </div>
         </section>
 
@@ -341,17 +382,19 @@ export function SingleUploadForm({
           </Accordion>
         </section>
 
-        <div className="sticky bottom-6 z-10 flex justify-end">
+        <div className="sticky bottom-0 z-10 pt-4 pb-2 bg-gradient-to-t from-background via-background to-transparent">
           <button
             type="submit"
             disabled={isSubmitting}
-            className="h-12 md:h-14 px-8 rounded-[2px] bg-primary text-primary-foreground text-[14px] font-medium tracking-wide inline-flex items-center justify-center hover:bg-primary/90 transition-colors shadow-lift disabled:opacity-60 disabled:cursor-not-allowed"
+            className="w-full sm:w-auto sm:ml-auto h-12 md:h-14 px-8 rounded-[2px] bg-primary text-primary-foreground text-[14px] font-medium tracking-wide flex items-center justify-center hover:bg-primary/90 transition-colors shadow-lift disabled:opacity-60 disabled:cursor-not-allowed"
           >
             {isSubmitting
               ? "Публикуется..."
-              : mode === "create"
-                ? "Опубликовать карточку"
-                : "Сохранить изменения"}
+              : onBatchSave
+                ? "Сохранить"
+                : mode === "create"
+                  ? "Опубликовать карточку"
+                  : "Сохранить изменения"}
           </button>
         </div>
       </div>

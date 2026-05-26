@@ -90,7 +90,7 @@ function QueuePage() {
                 toast.success("Обработка очереди запущена");
               }}
               disabled={isProcessing}
-              className="h-11 px-5 rounded-[2px] bg-primary text-primary-foreground text-[13px] font-medium inline-flex items-center gap-2 hover:bg-primary/90 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+              className="h-11 px-5 rounded-[2px] bg-primary text-primary-foreground text-[13px] font-medium inline-flex items-center gap-2 hover:bg-primary/90 transition-colors disabled:opacity-60 disabled:cursor-not-allowed w-full sm:w-auto justify-center"
             >
               <Send className="w-4 h-4" strokeWidth={1.8} />
               {isProcessing ? "Публикуется..." : "Запустить очередь"}
@@ -304,7 +304,7 @@ function QueueRow({ item, now, index, onPause, onPublish, onRemove, onEdit }: Qu
             )}
           </div>
 
-          <div className="flex items-center gap-1 shrink-0">
+          <div className="flex items-center gap-0.5 md:gap-1 shrink-0">
             <IconBtn label="Редактировать" onClick={onEdit} disabled={isProcessing}>
               <Pencil className="w-4 h-4" strokeWidth={1.7} />
             </IconBtn>
@@ -328,7 +328,7 @@ function QueueRow({ item, now, index, onPause, onPublish, onRemove, onEdit }: Qu
           </div>
         </div>
 
-        <div className="md:hidden px-3 pb-3 -mt-1 text-[12px] text-muted-foreground tabular-nums">
+        <div className="md:hidden px-3 pb-2 -mt-1 text-[12px] text-muted-foreground tabular-nums">
           {statusText ||
             (item.paused
               ? "На паузе"
@@ -360,7 +360,7 @@ function IconBtn({
       aria-label={label}
       title={label}
       className={cn(
-        "w-11 h-11 rounded-full inline-flex items-center justify-center transition-colors",
+        "w-9 h-9 md:w-11 md:h-11 rounded-full inline-flex items-center justify-center transition-colors",
         disabled
           ? "text-muted-foreground/50 cursor-not-allowed"
           : danger

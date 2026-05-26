@@ -210,25 +210,8 @@ function ArchivePage() {
           }
         >
           <SheetHeader className="text-left">
-            <div className="flex items-center justify-between">
-              <div className="text-[11px] tracking-[0.18em] uppercase text-muted-foreground">
-                Редактирование
-              </div>
-              <button
-                type="button"
-                className="text-destructive/80 hover:text-destructive transition-colors h-8 w-8 inline-flex items-center justify-center rounded-full hover:bg-destructive/10"
-                title="Удалить карточку"
-                onClick={async () => {
-                  if (editing?.id) {
-                    if (confirm("Вы уверены, что хотите удалить эту карточку из базы?")) {
-                      await deleteFromSupabase(editing.id);
-                      setEditing(null);
-                    }
-                  }
-                }}
-              >
-                <Trash2 className="w-4 h-4" />
-              </button>
+            <div className="text-[11px] tracking-[0.18em] uppercase text-muted-foreground">
+              Редактирование
             </div>
             <SheetTitle className="text-foreground text-[20px] font-semibold tracking-tight">
               Карточка диска
@@ -242,6 +225,24 @@ function ArchivePage() {
                 archiveId={editing.id}
                 onSaved={() => setEditing(null)}
               />
+              {/* Delete button — full-width, red destructive border */}
+              <div className="mt-6 mb-4 px-0">
+                <button
+                  type="button"
+                  className="w-full h-12 md:h-14 px-8 rounded-[2px] border border-destructive text-destructive text-[14px] font-medium tracking-wide flex items-center justify-center gap-2 hover:bg-destructive hover:text-white transition-colors"
+                  onClick={async () => {
+                    if (editing?.id) {
+                      if (confirm("Вы уверены, что хотите удалить эту карточку из базы?")) {
+                        await deleteFromSupabase(editing.id);
+                        setEditing(null);
+                      }
+                    }
+                  }}
+                >
+                  <Trash2 className="w-4 h-4" strokeWidth={1.7} />
+                  Удалить
+                </button>
+              </div>
             </div>
           )}
         </SheetContent>

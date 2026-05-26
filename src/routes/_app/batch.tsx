@@ -3,13 +3,15 @@ import { useNavigate } from "@tanstack/react-router";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
-import { Trash2, Send, Plus, X } from "lucide-react";
+import { Trash2, Send, Plus, X, Pencil } from "lucide-react";
 import { createFileRoute } from "@tanstack/react-router";
 import { PageHeader } from "@/components/primitives/PageHeader";
 import { SectionCard } from "@/components/primitives/SectionCard";
 import { Dropzone } from "@/components/primitives/Dropzone";
 import { SegmentedControl } from "@/components/primitives/SegmentedControl";
 import { IntervalConfigurator } from "@/components/batch/IntervalConfigurator";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { SingleUploadForm } from "@/components/upload/SingleUploadForm";
 import { CATEGORIES } from "@/lib/mock/seed";
 import { DEFAULT_SIZES, DEFAULT_SECTIONS } from "@/lib/defaults";
 import type { Category } from "@/store/queue.store";
@@ -19,18 +21,27 @@ import { useAuth } from "@/store/auth.store";
 import { dur, easeOut } from "@/lib/motion";
 import { EmptyState } from "@/components/primitives/EmptyState";
 import { uploadImageToCloudinary } from "@/lib/upload.service";
+import { useMediaQuery } from "@/hooks/useMediaQuery";
 
 export const Route = createFileRoute("/_app/batch")({
   head: () => ({ meta: [{ title: "Пакетная загрузка — Draxler" }] }),
   component: BatchPage,
 });
 
+interface DraftSection {
+  title: string;
+  text: string;
+}
+
 interface Draft {
   id: string;
-  title: string;
   category: Category;
   thumbs: string[];
   files: File[];
+  /* Extended fields — customizable per-draft via edit sheet */
+  tags: string[];
+  sizes: string[];
+  sections: DraftSection[];
 }
 
 function BatchPage() {
@@ -40,20 +51,22 @@ function BatchPage() {
   const addBatch = useQueue((s) => s.addBatch);
   const log = useActivity((s) => s.log);
   const actor = useAuth((s) => s.user?.name ?? "Система");
+  const isDesktop = useMediaQuery("(min-width: 768px)");
 
   const [drafts, setDrafts] = React.useState<Draft[]>([]);
   const [defaultCat, setDefaultCat] = React.useState<Category>("luxury");
   const [isSubmitting, setIsSubmitting] = React.useState(false);
+  const [editingDraft, setEditingDraft] = React.useState<Draft | null>(null);
 
   const handleInitialFiles = (files: File[]) => {
-    // Create one Draft per file by default to preserve the old drag-and-drop behavior,
-    // but now users can add more files to each Draft later.
     const next: Draft[] = files.map((f) => ({
       id: `d-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-      title: "",
       thumbs: [URL.createObjectURL(f)],
       files: [f],
       category: defaultCat,
+      tags: [],
+      sizes: [...DEFAULT_SIZES],
+      sections: DEFAULT_SECTIONS.map((s) => ({ title: s.title, text: s.text })),
     }));
     setDrafts((prev) => [...prev, ...next]);
     toast.success(`Добавлено ${files.length} изображений`);
@@ -63,9 +76,6 @@ function BatchPage() {
 
   const setDraftCat = (id: string, cat: Category) =>
     setDrafts((prev) => prev.map((d) => (d.id === id ? { ...d, category: cat } : d)));
-
-  const setDraftTitle = (id: string, title: string) =>
-    setDrafts((prev) => prev.map((d) => (d.id === id ? { ...d, title } : d)));
 
   const addFilesToDraft = (id: string, newFiles: File[]) => {
     setDrafts((prev) =>
@@ -83,9 +93,27 @@ function BatchPage() {
         if (d.id !== id) return d;
         const newThumbs = d.thumbs.filter((_, idx) => idx !== thumbIndex);
         const newFiles = d.files.filter((_, idx) => idx !== thumbIndex);
-        if (newThumbs.length === 0) return d; // Prevent removing the last image entirely here
+        if (newThumbs.length === 0) return d;
         return { ...d, thumbs: newThumbs, files: newFiles };
       }),
+    );
+  };
+
+  const updateDraftFromEdit = (
+    id: string,
+    patch: {
+      category: Category;
+      tags: string[];
+      sizes: string[];
+      sections: { title: string; text: string }[];
+    },
+  ) => {
+    setDrafts((prev) =>
+      prev.map((d) =>
+        d.id === id
+          ? { ...d, category: patch.category, tags: patch.tags, sizes: patch.sizes, sections: patch.sections }
+          : d,
+      ),
     );
   };
 
@@ -99,30 +127,28 @@ function BatchPage() {
       const finalPayloads = [];
 
       for (const d of drafts) {
-        // First, upload all files in this draft to Cloudinary sequentially (or Promise.all)
         const uploadedUrls = await Promise.all(d.files.map((f) => uploadImageToCloudinary(f)));
 
         finalPayloads.push({
           id: d.id,
-          title: d.title,
-          images: uploadedUrls, // Send Cloudinary URLs directly!
-          sizes: [...DEFAULT_SIZES],
-          section_1_title: DEFAULT_SECTIONS[0].title,
-          section_1_text: DEFAULT_SECTIONS[0].text,
-          section_2_title: DEFAULT_SECTIONS[1].title,
-          section_2_text: DEFAULT_SECTIONS[1].text,
-          section_3_title: DEFAULT_SECTIONS[2].title,
-          section_3_text: DEFAULT_SECTIONS[2].text,
-          section_4_title: DEFAULT_SECTIONS[3].title,
-          section_4_text: DEFAULT_SECTIONS[3].text,
-          section_5_title: DEFAULT_SECTIONS[4].title,
-          section_5_text: DEFAULT_SECTIONS[4].text,
+          title: "", // Auto-generated on publish
+          images: uploadedUrls,
+          sizes: d.sizes,
+          section_1_title: d.sections[0]?.title ?? DEFAULT_SECTIONS[0].title,
+          section_1_text: d.sections[0]?.text ?? DEFAULT_SECTIONS[0].text,
+          section_2_title: d.sections[1]?.title ?? DEFAULT_SECTIONS[1].title,
+          section_2_text: d.sections[1]?.text ?? DEFAULT_SECTIONS[1].text,
+          section_3_title: d.sections[2]?.title ?? DEFAULT_SECTIONS[2].title,
+          section_3_text: d.sections[2]?.text ?? DEFAULT_SECTIONS[2].text,
+          section_4_title: d.sections[3]?.title ?? DEFAULT_SECTIONS[3].title,
+          section_4_text: d.sections[3]?.text ?? DEFAULT_SECTIONS[3].text,
+          section_5_title: d.sections[4]?.title ?? DEFAULT_SECTIONS[4].title,
+          section_5_text: d.sections[4]?.text ?? DEFAULT_SECTIONS[4].text,
           category: d.category,
-          tags: [],
+          tags: d.tags,
         });
       }
 
-      // Add to store (which now inserts into Supabase queue table)
       await addBatch(finalPayloads);
 
       log({ actor, action: `загрузил батч (${drafts.length} шт.)` });
@@ -140,7 +166,7 @@ function BatchPage() {
   const rowVirtualizer = useVirtualizer({
     count: drafts.length,
     getScrollElement: () => parentRef.current,
-    estimateSize: () => 140, // Increased size to fit multiple thumbnails
+    estimateSize: () => 140,
     overscan: 8,
   });
 
@@ -161,7 +187,7 @@ function BatchPage() {
               type="button"
               onClick={sendToQueue}
               disabled={isSubmitting}
-              className="h-11 px-5 rounded-[2px] bg-primary text-primary-foreground text-[13px] font-medium inline-flex items-center gap-2 hover:bg-primary/90 transition-colors disabled:opacity-50"
+              className="h-11 px-5 rounded-[2px] bg-primary text-primary-foreground text-[13px] font-medium inline-flex items-center gap-2 hover:bg-primary/90 transition-colors disabled:opacity-50 w-full sm:w-auto justify-center"
             >
               <Send className="w-4 h-4" strokeWidth={1.8} />
               {isSubmitting ? "Загрузка..." : `Отправить в очередь (${drafts.length})`}
@@ -215,7 +241,7 @@ function BatchPage() {
             description="Перетащите изображения в зону загрузки выше, чтобы создать карточки."
           />
         ) : (
-          <div ref={parentRef} className="h-[600px] overflow-auto">
+          <div ref={parentRef} className="h-[60vh] md:h-[600px] overflow-auto">
             <div style={{ height: rowVirtualizer.getTotalSize(), position: "relative" }}>
               <AnimatePresence initial={false}>
                 {rowVirtualizer.getVirtualItems().map((row) => {
@@ -233,10 +259,10 @@ function BatchPage() {
                         height: row.size,
                       }}
                     >
-                      <div className="flex flex-col gap-3 pr-2 border-b border-border py-4 h-full">
-                        <div className="flex flex-col md:flex-row md:items-start gap-4 flex-1">
+                      <div className="flex flex-col gap-2 pr-2 border-b border-border py-3 h-full">
+                        <div className="flex flex-col md:flex-row md:items-start gap-3 flex-1">
                           {/* Image Gallery */}
-                          <div className="flex flex-wrap items-center gap-2 max-w-[320px]">
+                          <div className="flex flex-wrap items-center gap-2 max-w-[320px] shrink-0">
                             {d.thumbs.map((thumb, idx) => (
                               <div
                                 key={idx}
@@ -253,8 +279,7 @@ function BatchPage() {
                                 )}
                               </div>
                             ))}
-                            {/* Option to add more files to this draft */}
-                            <label className="w-14 h-14 rounded-[2px] border border-dashed border-border flex items-center justify-center cursor-pointer hover:bg-muted text-muted-foreground hover:text-foreground transition-colors">
+                            <label className="w-14 h-14 rounded-[2px] border border-dashed border-border flex items-center justify-center cursor-pointer hover:bg-muted text-muted-foreground hover:text-foreground transition-colors shrink-0">
                               <Plus className="w-5 h-5" />
                               <input
                                 type="file"
@@ -269,34 +294,43 @@ function BatchPage() {
                             </label>
                           </div>
 
-                          <div className="min-w-0 flex-1 md:mt-2">
-                            <input
-                              type="text"
-                              value={d.title}
-                              onChange={(e) => setDraftTitle(d.id, e.target.value)}
-                              placeholder={`Карточка #${row.index + 1}`}
-                              className="w-full bg-transparent text-[13px] text-foreground border-b border-transparent focus:border-border/50 outline-none pb-1 transition-colors font-medium"
-                            />
-                            <div className="text-[11px] text-muted-foreground truncate opacity-70 mt-1">
+                          {/* Title (read-only) + info */}
+                          <div className="min-w-0 flex-1">
+                            <div className="text-[13px] font-medium text-foreground truncate">
+                              Карточка #{row.index + 1}
+                            </div>
+                            <div className="text-[11px] text-muted-foreground truncate opacity-70 mt-0.5">
                               {d.files.length} фото
+                              {d.tags.length > 0 && ` · ${d.tags.slice(0, 2).join(", ")}`}
                             </div>
                           </div>
 
-                          <div className="flex items-center gap-4 pl-0 md:pl-4 md:mt-2 shrink-0">
+                          {/* Actions row — wraps on mobile */}
+                          <div className="flex items-center gap-2 shrink-0 flex-wrap">
                             <SegmentedControl
                               options={CATEGORIES}
                               value={d.category}
                               onChange={(v) => setDraftCat(d.id, v)}
                               size="sm"
                             />
-                            <button
-                              type="button"
-                              onClick={() => removeDraft(d.id)}
-                              aria-label="Удалить"
-                              className="w-10 h-10 rounded-full text-muted-foreground hover:text-destructive hover:bg-muted inline-flex items-center justify-center transition-colors"
-                            >
-                              <Trash2 className="w-4 h-4" strokeWidth={1.7} />
-                            </button>
+                            <div className="flex items-center gap-1">
+                              <button
+                                type="button"
+                                onClick={() => setEditingDraft(d)}
+                                aria-label="Редактировать"
+                                className="w-9 h-9 rounded-full text-muted-foreground hover:text-foreground hover:bg-muted inline-flex items-center justify-center transition-colors"
+                              >
+                                <Pencil className="w-4 h-4" strokeWidth={1.7} />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => removeDraft(d.id)}
+                                aria-label="Удалить"
+                                className="w-9 h-9 rounded-full text-muted-foreground hover:text-destructive hover:bg-muted inline-flex items-center justify-center transition-colors"
+                              >
+                                <Trash2 className="w-4 h-4" strokeWidth={1.7} />
+                              </button>
+                            </div>
                           </div>
                         </div>
                       </div>
@@ -308,6 +342,58 @@ function BatchPage() {
           </div>
         )}
       </SectionCard>
+
+      {/* Edit Sheet for individual draft */}
+      <Sheet open={!!editingDraft} onOpenChange={(open) => !open && setEditingDraft(null)}>
+        <SheetContent
+          side={isDesktop ? "right" : "bottom"}
+          className={
+            isDesktop
+              ? "w-full sm:max-w-[560px] overflow-y-auto bg-background border-l border-border"
+              : "h-[92vh] rounded-t-[12px] overflow-y-auto bg-background border-t border-border"
+          }
+        >
+          <SheetHeader className="text-left">
+            <div className="text-[11px] tracking-[0.18em] uppercase text-muted-foreground">
+              Редактирование
+            </div>
+            <SheetTitle className="text-foreground text-[20px] font-semibold tracking-tight">
+              Карточка из пакета
+            </SheetTitle>
+          </SheetHeader>
+          {editingDraft && (
+            <div className="mt-6">
+              <SingleUploadForm
+                mode="edit"
+                hideTitle
+                initial={{
+                  id: editingDraft.id,
+                  images: editingDraft.thumbs,
+                  category: editingDraft.category,
+                  tags: editingDraft.tags,
+                  sizes: editingDraft.sizes,
+                  section_1_title: editingDraft.sections[0]?.title,
+                  section_1_text: editingDraft.sections[0]?.text,
+                  section_2_title: editingDraft.sections[1]?.title,
+                  section_2_text: editingDraft.sections[1]?.text,
+                  section_3_title: editingDraft.sections[2]?.title,
+                  section_3_text: editingDraft.sections[2]?.text,
+                  section_4_title: editingDraft.sections[3]?.title,
+                  section_4_text: editingDraft.sections[3]?.text,
+                  section_5_title: editingDraft.sections[4]?.title,
+                  section_5_text: editingDraft.sections[4]?.text,
+                }}
+                onBatchSave={(patch) => {
+                  updateDraftFromEdit(editingDraft.id, patch);
+                  setEditingDraft(null);
+                  toast.success("Карточка обновлена");
+                }}
+                onSaved={() => setEditingDraft(null)}
+              />
+            </div>
+          )}
+        </SheetContent>
+      </Sheet>
     </motion.div>
   );
 }

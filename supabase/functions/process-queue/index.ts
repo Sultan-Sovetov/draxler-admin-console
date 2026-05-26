@@ -1,4 +1,4 @@
-﻿import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
+import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.48.0";
 
 const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
@@ -36,7 +36,35 @@ serve(async (req) => {
 
         let finalTitle = item.title;
         if (!finalTitle || finalTitle.trim() === "") {
-          finalTitle = `Авто (DRX-${Date.now().toString().slice(-4)})`;
+          // Auto-generate title by querying the latest product of this category
+          const categoryBaseNumbers: Record<string, number> = {
+            luxury: 116,
+            "off-road": 314,
+            sport: 213,
+          };
+
+          let lastNumber = categoryBaseNumbers[item.category] ?? 100;
+
+          try {
+            const { data: latestProduct } = await supabaseAdmin
+              .from("products")
+              .select("title")
+              .eq("type", item.category)
+              .order("created_at", { ascending: false })
+              .limit(1)
+              .maybeSingle();
+
+            if (latestProduct?.title) {
+              const match = latestProduct.title.match(/DRX-(\d+)/i);
+              if (match) {
+                lastNumber = parseInt(match[1], 10);
+              }
+            }
+          } catch {
+            // Fallback to base number if query fails
+          }
+
+          finalTitle = `DRX-${lastNumber + 1}`;
         }
 
         // Insert Product
